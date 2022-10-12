@@ -1,0 +1,17 @@
+TheDarkCastle
+=============
+
+A single player, procedurally generated text adventure game in Go.
+
+```
+You are in small garden surrounded by walls (5, 10)
+
+- Inventory: Show inventory
+- Hint
+- North: unvisited (4, 10)
+- East: unvisited (5, 11)
+- South: unvisited (6, 10)
+- West: unvisited (5, 9)
+
+>
+```
