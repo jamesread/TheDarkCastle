@@ -18,6 +18,7 @@ var (
 	stdinreader *bufio.Reader
 	colorCell color.Style
 	colorAction color.Style
+	colorActionShort color.Style
 	colorDenied color.Style
 	colorItem color.Style
 	colorSubtle color.Style
@@ -272,7 +273,7 @@ func (g *Game) dfsPlace(start *Cell, item *Item, avoid1 *Cell) *Cell {
 
 	room.itemsOnFloor.Put(item)
 	
-	g.hints = append(g.hints, "The " + item.name + " is in " + room.name)
+	g.hints = append(g.hints, "The " + colorDenied.Sprintf(item.name) + " is in " + colorCell.Sprintf(room.name))
 
 	return room
 }
@@ -470,13 +471,13 @@ func (g *Game) printMap() {
 func (g *Game) processInput(in string) {
 	fmt.Printf("\n")
 
-	if in == "hint" {
+	if in == "h" || in == "hint" {
 		idx := rand.Intn(len(g.hints))
 		fmt.Printf(g.hints[idx] + "\n")
 		return
 	}
 
-	if in == "items" || in == "inv" || in == "inventory" {
+	if in == "i" || in == "items" || in == "inv" || in == "inventory" {
 		itemCount := g.ownedItems.Size()
 		fmt.Printf(gettext.NGettext("ITEM_INVENTORY %d", "ITEM_INVENTORY_PL %d", uint64(itemCount)) + "\n\n")
 
@@ -532,9 +533,9 @@ func setJoin(set *ItemSet) string {
 	return ret
 }
 
-func (game *Game) printCellDirections(room *Cell, direction string) {
+func (game *Game) getDirectionActionText(room *Cell, direction string) string {
 	if room == nil {
-		return
+		return ""
 	}
 
 	lockedText := ""
@@ -549,16 +550,24 @@ func (game *Game) printCellDirections(room *Cell, direction string) {
 		roomDescription = colorCell.Sprintf(gettext.Gettext(room.description))
 	} 
 
-	fmt.Printf("- " + colorAction.Sprintf(direction) + ": %v (%v) %v\n", roomDescription, colorCell.Sprintf(room.name), lockedText)
+	return fmt.Sprintf(formatActionWord(direction) + ": %v (%v) %v", roomDescription, colorCell.Sprintf(room.name), lockedText)
 }
 
 func (game *Game) printPossibleActions() {
-	fmt.Println("- " + colorAction.Sprintf("Inventory") + ": Show inventory")
-	fmt.Println("- " + colorAction.Sprintf("Hint"))
-	game.printCellDirections(game.currentCell.north, "North")
-	game.printCellDirections(game.currentCell.east, "East")
-	game.printCellDirections(game.currentCell.south, "South")
-	game.printCellDirections(game.currentCell.west, "West")
+	bulletPrint(formatActionWord("Inventory") + ": Show inventory")
+	bulletPrint(formatActionWord("Hint"))
+	bulletPrint(game.getDirectionActionText(game.currentCell.north, "North"))
+	bulletPrint(game.getDirectionActionText(game.currentCell.east, "East"))
+	bulletPrint(game.getDirectionActionText(game.currentCell.south, "South"))
+	bulletPrint(game.getDirectionActionText(game.currentCell.west, "West"))
+}
+
+func formatActionWord(txt string) string {
+	return colorActionShort.Sprintf(txt[0:1]) + colorAction.Sprintf(txt[1:])
+}
+
+func bulletPrint(txt string) {
+	fmt.Printf("- " + txt + "\n")
 }
 
 func initGettext() {
@@ -570,7 +579,8 @@ func initGettext() {
 
 func initColors() {
 	colorCell = color.Style{color.FgBlue, color.OpBold}
-	colorAction = color.Style{color.FgMagenta, color.OpBold}
+	colorAction = color.Style{color.FgMagenta}
+	colorActionShort = color.Style{color.FgMagenta, color.OpBold}
 	colorDenied = color.Style{color.FgRed, color.OpBold}
 	colorItem = color.Style{color.FgGreen, color.OpBold}
 	colorSubtle = color.Style{color.FgGray, color.OpBold}
