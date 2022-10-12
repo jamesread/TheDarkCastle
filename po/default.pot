@@ -1,0 +1,57 @@
+# gettext translation
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+
+msgid   ""
+msgstr  "Project-Id-Version: \n"
+        "Report-Msgid-Bugs-To: EMAIL\n"
+        "POT-Creation-Date: 2022-09-19 15:04+0100\n"
+        "PO-Revision-Date: 2022-09-19 15:13+UTC\n"
+        "Last-Translator: James Read <contact@jread.com>\n"
+        "Language-Team: James Read <contact@jread.com>\n"
+        "Language: en_GB.utf8\n"
+        "MIME-Version: 1.0\n"
+        "Content-Type: text/plain; charset=UTF-8\n"
+        "Content-Transfer-Encoding: 8bit\n"
+		"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid 	"IN_ROOM"
+msgstr  "You are in "
+
+msgid 	"ROOM_COBBLESTONE"
+msgstr	"dark cobblestone room"
+
+msgid 	"ROOM_COURTYARD"
+msgstr 	"open, barren courtyard"
+
+msgid 	"ROOM_GARDEN"
+msgstr	"small garden surrounded by walls"
+
+msgid 	"ROOM_WORKSHOP"
+msgstr	"dimly lit abandoned workshop"
+
+msgid 	"ROOM_KITCHEN"
+msgstr 	"damp smelling kitchen"
+
+msgid 	"ROOM_BANQUET"
+msgstr	"derelict dining room"
+
+msgid   "ENTER_CONTINUE"
+msgstr  "Press ENTER to continue..."
+
+msgid   "GOODBYE"
+msgstr  "Goodbye!"
+
+msgid	"EXIT"
+msgstr	"You got to the exit"
+
+msgid	"UNKNOWN_COMMAND"
+msgstr	"Unknown command."
+
+msgid 	"ITEM_INVENTORY"
+msgid_plural "ITEM_INVENTORY_PL"
+msgstr[0] "You are holding one item."
+msgstr[1] "You are holding %d items."
+
+msgid 	"OPEN_DOOR"
+msgstr 	"You push on the door, and it opens into a "
