@@ -48,7 +48,8 @@ const (
 	WEST      = 3
 
 	//	PLAYER_ICON = "\xf0\x9f\x91\xa8"
-	PLAYER_ICON = "@"
+	PLAYER_ICON = "+"
+	ICON_BLOCK = "\u2588"
 )
 
 type Grid struct {
@@ -201,19 +202,23 @@ func buildLineOfRooms(g *Grid, row int, col int, dir int, branchProbability floa
 	if dir == -1 {
 		dir = randomDir()
 	}
+	
+	current := g.getCell(row, col)
+	current.room = true
 
 	rowRelative, colRelative := dir2rel(dir)
 
 	distance := 2 + rand.Intn(3)
 
 	for segment := 0; segment < distance; segment++ {
-		current := g.getCell(row, col)
 		next := g.getCell(row+rowRelative, col+colRelative)
 
 		// If we are at the edge of the grid, we cannot go further
 		if next == nil {
 			return row, col
 		}
+
+		next.room = true
 
 		if rand.Float32() < branchProbability {
 			buildLineOfRooms(g, row, col, -1, branchProbability-.1)
@@ -310,22 +315,22 @@ func generateGrid() *Grid {
 	g.exitCell = g.roomMap[exitCellRow][exitCellCol]
 	g.exitCell.exitCell = true
 
-	buildAllCellConnections(g *Grid)
+	g.buildAllCellConnections()
 
 	return g
 }
 
 func (g *Grid) buildAllCellConnections() {
-	for row := 0; row < g.grid.rows; row++ {
-		for col := 0; col < g.grid.cols; col++ {
+	for row := 0; row < g.rows; row++ {
+		for col := 0; col < g.cols; col++ {
 			buildCellConnections(g, g.roomMap[row][col])
 		}
 	}
 }
 
-func buildCellConnections(g *Grid, r *Cell) {
+func buildCellConnections(g *Grid, current *Cell) {
 	for dir := 0; dir < 4; dir++ {
-		adj := g.getCellRelative(r, dir)
+		adj := g.getCellRelative(current, dir)
 
 		if adj == nil {
 			continue
@@ -335,8 +340,6 @@ func buildCellConnections(g *Grid, r *Cell) {
 		case NORTH:
 			current.north = adj
 			adj.south = current
-
-			g.connectIfNeeded(current, dir)
 			break
 		case EAST:
 			current.east = adj
@@ -348,7 +351,7 @@ func buildCellConnections(g *Grid, r *Cell) {
 			break
 		case WEST:
 			current.west = adj
-			next.east = current
+			adj.east = current
 			break
 		default:
 			panic("Direction unknown")
@@ -390,6 +393,7 @@ type Cell struct {
 	west  *Cell
 
 	visited bool
+	discovered bool
 	room bool
 
 	exitCell bool
@@ -409,7 +413,7 @@ func buildGame() *Game {
 	}
 
 	exitKey := &Item{
-		name: "Exit Key",
+		name: "Red Key",
 	}
 
 	game.grid.exitCell.requiredItems.Put(exitKey)
@@ -437,7 +441,7 @@ func (g *Game) findCell(name string) *Cell {
 func (g *Game) canEnter(r *Cell, printReason bool) (bool, *ItemSet) {
 	missingItems := mapset.New[*Item]()
 
-	if r == nil {
+	if !r.room {
 		if printReason {
 			fmt.Println("There is nothing in that direction.")
 		}
@@ -468,7 +472,7 @@ func (g *Game) moveCell(requestedCell *Cell) {
 		requestedCell.visited = true
 
 		for dir := 0; dir < 4; dir++ {
-			adj := g.getRelative(requestedCell, dir2rhel(dir))
+			adj := g.getRelative(requestedCell, dir)
 			adj.discovered = true
 		}
 
@@ -489,11 +493,14 @@ func (g *Game) printMap() {
 	fmt.Println("")
 
 	for row := 0; row < g.grid.rows; row++ {
-		if row == 5 {
-			txt := g.getDirectionActionText(g.currentCell.west, "West")
-			l := 32 + (len(txt) - len(color.ClearCode(txt)))
+		if row == g.currentCell.row {
+			txt := formatString(g.getDirectionActionText(g.currentCell.west, "West"))
+			l := 24 - len(color.ClearCode(txt))
 
-			printString("%" + fmt.Sprintf("%v", l) + "s", g.getDirectionActionText(g.currentCell.west, "West"))
+			if (l > 0) {
+				printString(strings.Repeat(" ", l))
+			}
+			printString(txt)
 		} else {
 			fmt.Printf(indent)
 		}
@@ -506,6 +513,12 @@ func (g *Game) printMap() {
 			} else {
 				if r.visited {
 					fmt.Printf(colorCell.Sprintf("v"))
+				} else if r.discovered {
+					if r.room {
+						fmt.Printf(colorSubtle.Sprintf("o"))
+					} else {
+						fmt.Printf(colorSubtle.Sprintf(ICON_BLOCK))
+					}
 				} else {
 					if g.hasMap {
 						if !r.hasConnections() {
@@ -524,7 +537,7 @@ func (g *Game) printMap() {
 			}
 		}
 
-		if row == 5 {
+		if row == g.currentCell.row {
 			printString(" %s", g.getDirectionActionText(g.currentCell.east, "East"))
 		}
 
@@ -615,24 +628,24 @@ func setJoin(set *ItemSet) string {
 	return ret
 }
 
-func (game *Game) getDirectionActionText(room *Cell, direction string) string {
-	if room == nil {
-		return fmt.Sprintf("ACTION{%v}: Wall", direction)
+func (game *Game) getDirectionActionText(c *Cell, direction string) string {
+	if !c.room {
+		return colorSubtle.Sprintf("# Wall #")
 	}
 
 	lockedText := ""
 
-	if canEnter, missingItems := game.canEnter(room, false); !canEnter {
-		lockedText = colorDenied.Sprintf(" (requires: %v)", setJoin(missingItems))
+	if canEnter, missingItems := game.canEnter(c, false); !canEnter {
+		lockedText = colorDenied.Sprintf(" (%v)", setJoin(missingItems))
 	}
 
 	//roomDescription := colorSubtle.Sprintf("unvisited")
 
-	if room.visited {
+	if c.visited {
 		//	roomDescription = colorCell.Sprintf(gettext.Gettext(room.description))
 	}
 
-	return fmt.Sprintf("ACTION{%v}: (%v) %v", direction, colorCell.Sprintf(room.name), lockedText)
+	return fmt.Sprintf("ACTION{%v}: (%v) %v", direction, colorCell.Sprintf(c.name), lockedText)
 }
 
 func (game *Game) printPossibleActions() {
@@ -658,7 +671,7 @@ func initColors() {
 	colorDenied = color.Style{color.FgRed, color.OpBold}
 	colorItem = color.Style{color.FgGreen, color.OpBold}
 	colorSubtle = color.Style{color.FgGray, color.OpBold}
-	colorPlayer = color.Style{color.BgGreen, color.FgBlack, color.OpBold}
+	colorPlayer = color.Style{color.FgGreen, color.BgBlack, color.OpBold}
 }
 
 func main() {
