@@ -16,22 +16,22 @@ msgstr  "Project-Id-Version: \n"
 		"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 msgid 	"IN_ROOM"
-msgstr  "You are in "
+msgstr  "You are in"
 
 msgid 	"ROOM_COBBLESTONE"
 msgstr	"dark cobblestone room"
 
 msgid 	"ROOM_COURTYARD"
-msgstr 	"open, barren courtyard"
+msgstr 	"an open, barren courtyard"
 
 msgid 	"ROOM_GARDEN"
-msgstr	"small garden surrounded by walls"
+msgstr	"a small garden surrounded by walls"
 
 msgid 	"ROOM_WORKSHOP"
-msgstr	"dimly lit abandoned workshop"
+msgstr	"a dimly lit abandoned workshop"
 
 msgid 	"ROOM_KITCHEN"
-msgstr 	"damp smelling kitchen"
+msgstr 	"a damp smelling kitchen"
 
 msgid 	"ROOM_BANQUET"
 msgstr	"derelict dining room"
@@ -49,7 +49,7 @@ msgid	"UNKNOWN_COMMAND"
 msgstr	"Unknown command."
 
 msgid 	"ITEM_INVENTORY"
-msgid_plural "ITEM_INVENTORY_PL"
+msgid_plural "ITEM_INVENTORY_PL %d"
 msgstr[0] "You are holding one item."
 msgstr[1] "You are holding %d items."
 

@@ -1,32 +1,35 @@
 package main
 
 import (
-	"os"
 	"bufio"
-	"log"
-	"time"
 	"fmt"
-	"math/rand"
-	"strings"
-	"os/exec"
+	"github.com/gookit/color"
 	gettext "github.com/gosexy/gettext"
 	"github.com/zyedidia/generic/mapset"
-	"github.com/gookit/color"
+	"log"
+	"math/rand"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+	"regexp"
 )
 
 var (
-	stdinreader *bufio.Reader
-	colorCell color.Style
-	colorAction color.Style
+	stdinreader      *bufio.Reader
+	colorCell        color.Style
+	colorAction      color.Style
 	colorActionShort color.Style
-	colorDenied color.Style
-	colorItem color.Style
-	colorSubtle color.Style
-	roomDescriptions []string 
+	colorDenied      color.Style
+	colorItem        color.Style
+	colorSubtle      color.Style
+	colorPlayer      color.Style
+	roomDescriptions []string
+	regexpStringFunctions *regexp.Regexp
 )
 
 func init() {
-	roomDescriptions = []string {
+	roomDescriptions = []string{
 		gettext.Gettext("ROOM_COBBLESTONE"),
 		gettext.Gettext("ROOM_COURTYARD"),
 		gettext.Gettext("ROOM_GARDEN"),
@@ -35,29 +38,73 @@ func init() {
 		gettext.Gettext("ROOM_BANQUET"),
 	}
 
+	regexpStringFunctions = regexp.MustCompile(`([a-zA-Z_]*){([a-z A-Z0-9_,:]+)}`)
 }
 
 const (
 	NORTH int = 0
-	EAST = 1
-	SOUTH = 2
-	WEST = 3
+	EAST      = 1
+	SOUTH     = 2
+	WEST      = 3
+
+	//	PLAYER_ICON = "\xf0\x9f\x91\xa8"
+	PLAYER_ICON = "@"
 )
 
 type Grid struct {
 	roomMap map[int]map[int]*Cell
 	roomDir map[string]*Cell
-	rows int
-	cols int
+	rows    int
+	cols    int
 
 	startCell *Cell
-	exitCell *Cell
+	exitCell  *Cell
+}
+
+
+
+func formatString(msg string, a ...any ) string {
+	ret := fmt.Sprintf(msg, a...)
+
+	matches := regexpStringFunctions.FindAllStringSubmatch(ret, -1)
+
+	for _, match := range matches {
+		function := match[1]
+		operand := match[2]
+
+		val := "blat"
+
+		switch(function) {
+		case "GT":
+			val = gettext.Gettext(operand)
+			break
+		case "ITEM":
+			val = colorItem.Sprintf(operand)
+			break
+		case "ROOM":
+			val = colorCell.Sprintf(gettext.Gettext(operand))
+			break
+		case "ACTION":
+			val = colorActionShort.Sprintf(operand[0:1]) + colorAction.Sprintf(operand[1:])
+			break
+		default:
+			ret = fmt.Sprintf("ERROR, function not found: %v -> %v", function, operand)
+		}
+
+		ret = strings.Replace(ret, match[0], val, -1)
+	}
+
+	return ret
+}
+
+func printString(msg string, a ...any) {
+	fmt.Print(formatString(msg, a...))
 }
 
 func (g *Grid) getCellRelative(r *Cell, dir int) *Cell {
 	rowRelative, colRelative := dir2rel(dir)
 
-	return g.getCell(r.row + rowRelative, r.col + colRelative)
+	return g.getCell(r.row+rowRelative, r.col+colRelative)
 }
 
 func (g *Grid) getCell(row int, col int) *Cell {
@@ -92,16 +139,16 @@ func (g *Grid) build(rows int, cols int) {
 		g.roomMap[currentRow] = make(map[int]*Cell)
 
 		for currentCol := 0; currentCol < cols; currentCol++ {
-			roomName := fmt.Sprintf("%v, %v", currentRow, currentCol)
+			roomName := fmt.Sprintf("%v:%v", currentRow, currentCol)
 
 			r := &Cell{
-				name: roomName,
-				description: generateCellDescription(),
-				visited: false,
+				name:          roomName,
+				description:   generateCellDescription(),
+				visited:       false,
 				requiredItems: mapset.New[*Item](),
-				itemsOnFloor: mapset.New[*Item](),
-				row: currentRow,
-				col: currentCol,
+				itemsOnFloor:  mapset.New[*Item](),
+				row:           currentRow,
+				col:           currentCol,
 			}
 
 			g.roomMap[currentRow][currentCol] = r
@@ -123,24 +170,24 @@ func dir2rel(dir int) (int, int) {
 	colRelative := 0
 
 	switch dir {
-		case NORTH:
-			rowRelative = -1
-			colRelative = 0
-			break;
-		case EAST:
-			rowRelative = 0
-			colRelative = 1
-			break;
-		case SOUTH:
-			rowRelative = 1
-			colRelative = 0
-			break;
-		case WEST:
-			rowRelative = 0
-			colRelative = -1
-			break
-		default:
-			panic("Direction unknown")
+	case NORTH:
+		rowRelative = -1
+		colRelative = 0
+		break
+	case EAST:
+		rowRelative = 0
+		colRelative = 1
+		break
+	case SOUTH:
+		rowRelative = 1
+		colRelative = 0
+		break
+	case WEST:
+		rowRelative = 0
+		colRelative = -1
+		break
+	default:
+		panic("Direction unknown")
 	}
 
 	return rowRelative, colRelative
@@ -150,58 +197,26 @@ func randomDir() int {
 	return rand.Intn(4)
 }
 
-func (g *Grid) connectIfNeeded(r *Cell, dir int) {
-	//adj := g.getCellRelative(r, dir) 
-/*
-	if g.getCellRelative(current, WEST).hasRoom() {
-
-	}
-	*/
-}
-
-
-func turtle(g *Grid, row int, col int, dir int, branchProbability float32) (int, int) {	
+func buildLineOfRooms(g *Grid, row int, col int, dir int, branchProbability float32) (int, int) {
 	if dir == -1 {
 		dir = randomDir()
 	}
 
 	rowRelative, colRelative := dir2rel(dir)
 
-	length := 2 + rand.Intn(3)
-	
-	for segment := 0; segment < length; segment++ {
-		current := g.getCell(row, col)
-		next := g.getCell(row + rowRelative, col + colRelative)
+	distance := 2 + rand.Intn(3)
 
+	for segment := 0; segment < distance; segment++ {
+		current := g.getCell(row, col)
+		next := g.getCell(row+rowRelative, col+colRelative)
+
+		// If we are at the edge of the grid, we cannot go further
 		if next == nil {
 			return row, col
 		}
 
-		switch dir {
-		case NORTH: 
-			current.north = next
-			next.south = current
-
-			g.connectIfNeeded(current, dir)
-			break
-		case EAST:
-			current.east = next
-			next.west = current
-			break
-		case SOUTH:
-			current.south = next
-			next.north = current
-			break;
-		case WEST:
-			current.west = next
-			next.east = current
-			break;
-		default:
-			panic("Direction unknown")
-		}
-
 		if rand.Float32() < branchProbability {
-			turtle(g, row, col, -1, branchProbability - .1)
+			buildLineOfRooms(g, row, col, -1, branchProbability-.1)
 		}
 
 		row += rowRelative
@@ -213,7 +228,7 @@ func turtle(g *Grid, row int, col int, dir int, branchProbability float32) (int,
 
 func addCandidateIfNotVisited(visited *mapset.Set[*Cell], candidates *mapset.Set[*Cell], avoid *mapset.Set[*Cell], candidate *Cell) {
 	if candidate == nil {
-		return 
+		return
 	}
 
 	if visited.Has(candidate) {
@@ -227,7 +242,7 @@ func addCandidateIfNotVisited(visited *mapset.Set[*Cell], candidates *mapset.Set
 	candidates.Put(candidate)
 }
 
-func dfsWalkToRandom(from *Cell, visited *mapset.Set[*Cell], avoid *mapset.Set[*Cell]) (*Cell) {
+func dfsWalkToRandom(from *Cell, visited *mapset.Set[*Cell], avoid *mapset.Set[*Cell]) *Cell {
 	visited.Put(from)
 
 	candidates := mapset.New[*Cell]()
@@ -237,7 +252,7 @@ func dfsWalkToRandom(from *Cell, visited *mapset.Set[*Cell], avoid *mapset.Set[*
 	addCandidateIfNotVisited(visited, &candidates, avoid, from.south)
 	addCandidateIfNotVisited(visited, &candidates, avoid, from.west)
 
-	var ret *Cell;
+	var ret *Cell
 
 	candidates.Each(func(from *Cell) {
 		if from == nil {
@@ -272,13 +287,13 @@ func (g *Game) dfsPlace(start *Cell, item *Item, avoid1 *Cell) *Cell {
 	}
 
 	room.itemsOnFloor.Put(item)
-	
-	g.hints = append(g.hints, "The " + colorDenied.Sprintf(item.name) + " is in " + colorCell.Sprintf(room.name))
+
+	g.hints = append(g.hints, "The "+colorDenied.Sprintf(item.name)+" is in "+colorCell.Sprintf(room.name))
 
 	return room
 }
 
-func generateGrid() (*Grid) {
+func generateGrid() *Grid {
 	g := &Grid{}
 	g.build(10, 20)
 
@@ -287,14 +302,58 @@ func generateGrid() (*Grid) {
 
 	g.startCell = g.roomMap[row][col]
 
-	turtle(g, row, col, NORTH, .5)
-	turtle(g, row, col, EAST, .5)
-	turtle(g, row, col, SOUTH, .5)
-	exitCellRow, exitCellCol := turtle(g, row, col, WEST, .5)
+	buildLineOfRooms(g, row, col, NORTH, .5)
+	buildLineOfRooms(g, row, col, EAST, .5)
+	buildLineOfRooms(g, row, col, SOUTH, .5)
+	exitCellRow, exitCellCol := buildLineOfRooms(g, row, col, WEST, .5)
 
-	g.exitCell = g.roomMap[exitCellRow][exitCellCol] 
+	g.exitCell = g.roomMap[exitCellRow][exitCellCol]
+	g.exitCell.exitCell = true
+
+	buildAllCellConnections(g *Grid)
 
 	return g
+}
+
+func (g *Grid) buildAllCellConnections() {
+	for row := 0; row < g.grid.rows; row++ {
+		for col := 0; col < g.grid.cols; col++ {
+			buildCellConnections(g, g.roomMap[row][col])
+		}
+	}
+}
+
+func buildCellConnections(g *Grid, r *Cell) {
+	for dir := 0; dir < 4; dir++ {
+		adj := g.getCellRelative(r, dir)
+
+		if adj == nil {
+			continue
+		}
+
+		switch dir {
+		case NORTH:
+			current.north = adj
+			adj.south = current
+
+			g.connectIfNeeded(current, dir)
+			break
+		case EAST:
+			current.east = adj
+			adj.west = current
+			break
+		case SOUTH:
+			current.south = adj
+			adj.north = current
+			break
+		case WEST:
+			current.west = adj
+			next.east = current
+			break
+		default:
+			panic("Direction unknown")
+		}
+	}
 }
 
 type ItemSet = mapset.Set[*Item]
@@ -304,10 +363,10 @@ type Game struct {
 
 	hints []string
 
-	grid *Grid;
+	grid *Grid
 
 	hasMap bool
-	
+
 	ownedItems ItemSet
 }
 
@@ -316,60 +375,52 @@ type Item struct {
 }
 
 type Cell struct {
-	name string
+	name        string
 	description string
 
 	row int
 	col int
 
-	itemsOnFloor ItemSet
+	itemsOnFloor  ItemSet
 	requiredItems ItemSet
 
-	north *Cell;
-	east *Cell;
-	south *Cell;
-	west *Cell; 
+	north *Cell
+	east  *Cell
+	south *Cell
+	west  *Cell
 
 	visited bool
+	room bool
 
 	exitCell bool
 }
 
-type Room struct {
-	Cell
-}
+func (g *Game) getRelative(r *Cell, dir int) *Cell {
+	rowRel, colRel := dir2rel(dir)
 
-func (r *Cell) getConnection(dir int) (*Cell) {
-	switch dir {
-	case NORTH: return r.north
-	case EAST: return r.east
-	case SOUTH: return r.south
-	case WEST: return r.west
-	default: panic("Unknown direction")
-	}
+	return g.grid.getCell(r.row+rowRel, r.col+colRel)
 }
 
 func buildGame() *Game {
 	game := &Game{
-		grid: generateGrid(),
+		grid:       generateGrid(),
 		ownedItems: mapset.New[*Item](),
-		hasMap: false,
+		hasMap:     false,
 	}
 
-	exitKey := &Item {
+	exitKey := &Item{
 		name: "Exit Key",
 	}
 
-	game.grid.exitCell.exitCell = true
 	game.grid.exitCell.requiredItems.Put(exitKey)
 
 	game.dfsPlace(game.grid.startCell, exitKey, game.grid.exitCell)
-	game.dfsPlace(game.grid.startCell, &Item { name: "Map" }, game.grid.exitCell)
+	game.dfsPlace(game.grid.startCell, &Item{name: "Map"}, game.grid.exitCell)
 
 	game.currentCell = game.grid.roomMap[game.grid.rows/2][game.grid.cols/2]
 
 	game.moveCell(game.grid.startCell)
-	
+
 	return game
 }
 
@@ -403,7 +454,7 @@ func (g *Game) canEnter(r *Cell, printReason bool) (bool, *ItemSet) {
 
 	if missingItems.Size() > 0 && printReason {
 		missingItems.Each(func(i *Item) {
-		fmt.Printf("To enter, you need: %v \n", colorDenied.Sprintf(i.name))
+			fmt.Printf("To enter, you need: %v \n", colorDenied.Sprintf(i.name))
 		})
 	}
 
@@ -412,20 +463,13 @@ func (g *Game) canEnter(r *Cell, printReason bool) (bool, *ItemSet) {
 
 func (g *Game) moveCell(requestedCell *Cell) {
 	if res, _ := g.canEnter(requestedCell, true); res {
-		fmt.Printf(gettext.Gettext("OPEN_DOOR") + "%v\n\n", colorCell.Sprintf(gettext.Gettext(requestedCell.description)))
+		fmt.Printf(gettext.Gettext("OPEN_DOOR")+"%v\n\n", colorCell.Sprintf(gettext.Gettext(requestedCell.description)))
 
 		requestedCell.visited = true
 
 		for dir := 0; dir < 4; dir++ {
-			if requestedCell.getConnection(dir) == nil {
-				rowRelative, colRelative := dir2rel(dir)
-
-				wall := g.grid.getCell(requestedCell.row + rowRelative, requestedCell.col + colRelative)
-
-				if wall != nil {
-					wall.visited = true
-				}
-			}
+			adj := g.getRelative(requestedCell, dir2rhel(dir))
+			adj.discovered = true
 		}
 
 		g.currentCell = requestedCell
@@ -433,39 +477,72 @@ func (g *Game) moveCell(requestedCell *Cell) {
 }
 
 func (r *Cell) hasConnections() bool {
-	return r.north == nil || r.east == nil || r.south == nil || r.west == nil 
+	return r.north == nil || r.east == nil || r.south == nil || r.west == nil
 }
 
 func (g *Game) printMap() {
+	indent := "\t\t\t"
+
+	printString(indent)
+	printStringCenter(g.getDirectionActionText(g.currentCell.north, "North"))
+	fmt.Println("")
+	fmt.Println("")
+
 	for row := 0; row < g.grid.rows; row++ {
-		fmt.Printf("w ")
+		if row == 5 {
+			txt := g.getDirectionActionText(g.currentCell.west, "West")
+			l := 32 + (len(txt) - len(color.ClearCode(txt)))
+
+			printString("%" + fmt.Sprintf("%v", l) + "s", g.getDirectionActionText(g.currentCell.west, "West"))
+		} else {
+			fmt.Printf(indent)
+		}
+
 		for col := 0; col < g.grid.cols; col++ {
 			r := g.grid.roomMap[row][col]
 
 			if g.currentCell == r {
-				fmt.Printf("@")
-			} else {	
-				if !r.visited {
-					fmt.Printf(colorSubtle.Sprintf("?"))
+				fmt.Printf(colorPlayer.Sprint(PLAYER_ICON))
+			} else {
+				if r.visited {
+					fmt.Printf(colorCell.Sprintf("v"))
 				} else {
-					if !r.hasConnections() {
-						fmt.Printf(colorSubtle.Sprintf("."))
-					} else {
-						if r.exitCell {
-							fmt.Printf(colorDenied.Sprintf("£"))
+					if g.hasMap {
+						if !r.hasConnections() {
+							fmt.Printf(colorSubtle.Sprintf("."))
 						} else {
-							fmt.Printf(colorCell.Sprintf("#"))
+							if r.exitCell {
+								fmt.Printf(colorDenied.Sprintf("£"))
+							} else {
+								fmt.Printf(colorSubtle.Sprintf("."))
+							}
 						}
+					} else {
+						fmt.Printf(colorSubtle.Sprintf("."))
 					}
 				}
 			}
 		}
 
-		fmt.Println(" e ")
+		if row == 5 {
+			printString(" %s", g.getDirectionActionText(g.currentCell.east, "East"))
+		}
+
+		fmt.Print("\n")
 	}
 
 	fmt.Println("")
+
+	printString(indent)
+	printStringCenter(g.getDirectionActionText(g.currentCell.south, "South"))
+
 	fmt.Println("")
+	fmt.Println("")
+}
+
+func printStringCenter(s string) {
+	w := 28 + (len(s) - len(color.ClearCode(s)))
+	printString("%[1]*s", -w, fmt.Sprintf("%[1]*s", (w + len(s))/2, s))
 }
 
 func (g *Game) processInput(in string) {
@@ -479,9 +556,8 @@ func (g *Game) processInput(in string) {
 
 	if in == "i" || in == "items" || in == "inv" || in == "inventory" {
 		itemCount := g.ownedItems.Size()
-		fmt.Printf(gettext.NGettext("ITEM_INVENTORY %d", "ITEM_INVENTORY_PL %d", uint64(itemCount)) + "\n\n")
+		fmt.Printf(gettext.NGettext("ITEM_INVENTORY", "%d ITEM_INVENTORY_PL", uint64(itemCount))+"\n\n", itemCount)
 
-		fmt.Printf("Items: %v\n", itemCount)
 		g.ownedItems.Each(func(item *Item) {
 			fmt.Printf("Item: %v\n", item.name)
 		})
@@ -494,7 +570,7 @@ func (g *Game) processInput(in string) {
 		os.Exit(0)
 	}
 
-	if in == "east" || in == "e" { 
+	if in == "east" || in == "e" {
 		g.moveCell(g.currentCell.east)
 		return
 	}
@@ -527,47 +603,45 @@ func setJoin(set *ItemSet) string {
 	ret := ""
 
 	set.Each(func(i *Item) {
-		ret += i.name + "," 
+		ret += i.name + ","
 	})
+
+
+	// Remove trailing comma
+	if len(ret) > 0 {
+		ret = ret[:len(ret)-1]
+	}
 
 	return ret
 }
 
 func (game *Game) getDirectionActionText(room *Cell, direction string) string {
 	if room == nil {
-		return ""
+		return fmt.Sprintf("ACTION{%v}: Wall", direction)
 	}
 
 	lockedText := ""
 
 	if canEnter, missingItems := game.canEnter(room, false); !canEnter {
-		lockedText = colorDenied.Sprintf(" (locked, required items: %v)", setJoin(missingItems))
+		lockedText = colorDenied.Sprintf(" (requires: %v)", setJoin(missingItems))
 	}
 
-	roomDescription := colorSubtle.Sprintf("unvisited")
+	//roomDescription := colorSubtle.Sprintf("unvisited")
 
 	if room.visited {
-		roomDescription = colorCell.Sprintf(gettext.Gettext(room.description))
-	} 
+		//	roomDescription = colorCell.Sprintf(gettext.Gettext(room.description))
+	}
 
-	return fmt.Sprintf(formatActionWord(direction) + ": %v (%v) %v", roomDescription, colorCell.Sprintf(room.name), lockedText)
+	return fmt.Sprintf("ACTION{%v}: (%v) %v", direction, colorCell.Sprintf(room.name), lockedText)
 }
 
 func (game *Game) printPossibleActions() {
-	bulletPrint(formatActionWord("Inventory") + ": Show inventory")
-	bulletPrint(formatActionWord("Hint"))
-	bulletPrint(game.getDirectionActionText(game.currentCell.north, "North"))
-	bulletPrint(game.getDirectionActionText(game.currentCell.east, "East"))
-	bulletPrint(game.getDirectionActionText(game.currentCell.south, "South"))
-	bulletPrint(game.getDirectionActionText(game.currentCell.west, "West"))
+	printBullet("ACTION{Inventory}: \tShow inventory")
+	printBullet("ACTION{Hint}: \tShow hint")
 }
 
-func formatActionWord(txt string) string {
-	return colorActionShort.Sprintf(txt[0:1]) + colorAction.Sprintf(txt[1:])
-}
-
-func bulletPrint(txt string) {
-	fmt.Printf("- " + txt + "\n")
+func printBullet(txt string) {
+	fmt.Printf("- " + formatString(txt) + "\n")
 }
 
 func initGettext() {
@@ -584,54 +658,58 @@ func initColors() {
 	colorDenied = color.Style{color.FgRed, color.OpBold}
 	colorItem = color.Style{color.FgGreen, color.OpBold}
 	colorSubtle = color.Style{color.FgGray, color.OpBold}
+	colorPlayer = color.Style{color.BgGreen, color.FgBlack, color.OpBold}
 }
 
 func main() {
 	initGettext()
 	initColors()
+
 	rand.Seed(time.Now().UnixNano())
 
 	game := buildGame()
 
-	color.Cyan.Printf("hello")
-
 	clr()
 
 	for {
-		if game.currentCell.exitCell {
-			fmt.Printf(gettext.Gettext("EXIT") + "\n\n")
-			return
-		}
-
-		fmt.Printf(gettext.Gettext("IN_ROOM") + "%v (%v)\n\n", colorCell.Sprintf(gettext.Gettext(game.currentCell.description)), colorCell.Sprintf(game.currentCell.name))
-
-		game.currentCell.itemsOnFloor.Each(func(item *Item) {
-			game.ownedItems.Put(item)
-			game.currentCell.itemsOnFloor.Remove(item)
-
-			if item.name == "Map" {
-				game.hasMap = true
-			}
-
-			fmt.Printf(colorItem.Sprintf("Picked up item: %v\n\n", item.name))
-		})
-
-		if game.hasMap {
-			game.printMap()
-		}
-
-		game.printPossibleActions()
-
-		fmt.Printf("\n> ")
-
-		game.processInput(getInput())
-
-		fmt.Printf(gettext.Gettext("ENTER_CONTINUE"))
-
-		getInput()
-
-		clr()
+		mainLoop(game)
 	}
+}
+
+func mainLoop(game *Game) {
+	if game.currentCell.exitCell {
+		fmt.Printf(gettext.Gettext("EXIT") + "\n\n")
+		return
+	}
+
+	printString("GT{IN_ROOM} ROOM{%v} (ROOM{%v})\n\n", game.currentCell.description, game.currentCell.name)
+
+	//	color.Red.Printf(PLAYER_ICON)
+
+	game.currentCell.itemsOnFloor.Each(func(item *Item) {
+		game.ownedItems.Put(item)
+		game.currentCell.itemsOnFloor.Remove(item)
+
+		if item.name == "Map" {
+			game.hasMap = true
+		}
+
+		colorItem.Sprintf("Picked up item %v \n\n", item.name)
+	})
+
+	game.printMap()
+
+	game.printPossibleActions()
+
+	fmt.Printf("\n> ")
+
+	game.processInput(getInput())
+
+	fmt.Printf(gettext.Gettext("ENTER_CONTINUE"))
+
+	getInput()
+
+	clr()
 }
 
 func getInput() string {
@@ -642,7 +720,7 @@ func getInput() string {
 	chr, err := stdinreader.ReadString('\n')
 
 	if err != nil {
-		log.Fatalf("Cannot read stdin: %v")
+		log.Fatalf("Cannot read stdin: %v", err)
 		return ""
 	}
 
