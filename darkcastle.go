@@ -203,22 +203,18 @@ func buildLineOfRooms(g *Grid, row int, col int, dir int, branchProbability floa
 		dir = randomDir()
 	}
 	
-	current := g.getCell(row, col)
-	current.room = true
-
 	rowRelative, colRelative := dir2rel(dir)
 
 	distance := 2 + rand.Intn(3)
 
 	for segment := 0; segment < distance; segment++ {
-		next := g.getCell(row+rowRelative, col+colRelative)
+		current := g.getCell(row, col)
+		current.room = true
 
-		// If we are at the edge of the grid, we cannot go further
-		if next == nil {
+		// If the next cell would be null, we are at the edge of the grid.
+		if g.getCell(row + rowRelative, col + colRelative) == nil {
 			return row, col
 		}
-
-		next.room = true
 
 		if rand.Float32() < branchProbability {
 			buildLineOfRooms(g, row, col, -1, branchProbability-.1)
